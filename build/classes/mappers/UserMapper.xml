@@ -1,0 +1,183 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Config 3.0//EN"
+			"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="edu.hrms.mappers.userMapper">
+	
+	<select id="selectLogin" parameterType="String" resultType="java.util.Map">
+		SELECT userid AS username, password, enabled, authority, name, email
+				, dept, phone, position, joindate, IFNULL(retiredate, '-') AS retiredate
+				, state, addr, keepVaca, useVaca,
+			CASE LENGTH(phone)
+			WHEN 11 THEN CONCAT(LEFT(phone, 3), '-', MID(phone, 4, 4), '-', RIGHT(phone, 4))
+			WHEN 10 THEN CONCAT(LEFT(phone, 3), '-', MID(phone, 4, 3), '-', RIGHT(phone, 4))
+			END AS phoneNumber,
+			CASE WHEN dept = 'M' THEN '관리부'
+	   	 	WHEN dept = 'D' THEN '개발부'
+	        WHEN dept = 'S' THEN '영업부'
+	        WHEN dept = 'P' THEN '기획부'
+	        WHEN dept = 'H' THEN '인사부'
+	        ELSE '부서미정' END AS deptCase,  
+			CASE WHEN position = 'A' THEN '관리자'
+	   	 	WHEN position = 'C' THEN '대표'
+	        WHEN position = 'D' THEN '부장'
+	        WHEN position = 'L' THEN '팀장'
+	        WHEN position = 'E' THEN '사원'
+	        ELSE '직급미정' END AS positionCase 
+			FROM user
+			WHERE userid = #{userid};
+	</select>
+	
+	<select id="selectUser" parameterType="int" resultType="employeeVO">
+		SELECT userid, password, enabled, authority, name, email
+				, dept, phone, position, joindate, IFNULL(retiredate, '-') AS retiredate
+				, state, addr, keepVaca, useVaca,
+			CASE LENGTH(phone)
+			WHEN 11 THEN CONCAT(LEFT(phone, 3), '-', MID(phone, 4, 4), '-', RIGHT(phone, 4))
+			WHEN 10 THEN CONCAT(LEFT(phone, 3), '-', MID(phone, 4, 3), '-', RIGHT(phone, 4))
+			END AS phoneNumber,
+			CASE WHEN dept = 'M' THEN '관리부'
+	   	 	WHEN dept = 'D' THEN '개발부'
+	        WHEN dept = 'S' THEN '영업부'
+	        WHEN dept = 'P' THEN '기획부'
+	        WHEN dept = 'H' THEN '인사부'
+	        ELSE '부서미정' END AS deptCase,  
+			CASE WHEN position = 'A' THEN '관리자'
+	   	 	WHEN position = 'C' THEN '대표'
+	        WHEN position = 'D' THEN '부장'
+	        WHEN position = 'L' THEN '팀장'
+	        WHEN position = 'E' THEN '사원'
+	        ELSE '직급미정' END AS positionCase 
+			FROM user
+			WHERE userid = #{userid};
+	</select>
+	
+	<insert id="insertUser" parameterType="employeeVO">	
+		INSERT INTO user(userid, password, 
+			name, dept, position, state, 
+			joinDate, phone, email, 
+			addr, enabled, authority, 
+			keepVaca, useVaca)
+		VALUES(#{userid}, #{password}, 
+			#{name}, #{dept}, #{position}, 
+			#{state}, #{joinDate}, #{phone}, 
+			#{email}, #{addr}, 1, 
+			<choose>
+				<when test='position == "E"'>
+					'ROLE_EMPLOYEE', 
+				</when>
+				<when test='position == "L"'>
+					'ROLE_LEADER', 
+				</when>
+				<when test='position == "D"'>
+					'ROLE_DIRECTOR', 
+				</when>
+				<when test='position == "A"'>
+					'ROLE_ADMIN', 
+				</when>
+				<when test='position == "C"'>
+					'ROLE_CEO', 
+				</when>
+			</choose>
+			120, 0);
+	</insert>
+	
+	<select id="selectMaxUserid" parameterType="String" resultType="int">
+		SELECT MAX(userid) FROM user WHERE dept = #{dept};
+	</select>
+	
+	<select id="selectUserAll" resultType="employeeVO" parameterType="Map">
+		SELECT *,
+		CASE LENGTH(phone)
+		WHEN 11 THEN CONCAT(LEFT(phone, 3), '-', MID(phone, 4, 4), '-', RIGHT(phone, 4))
+		WHEN 10 THEN CONCAT(LEFT(phone, 3), '-', MID(phone, 4, 3), '-', RIGHT(phone, 4))
+		END AS phoneNumber,
+		CASE WHEN dept = 'M' THEN '관리부'
+   	 	WHEN dept = 'D' THEN '개발부'
+        WHEN dept = 'S' THEN '영업부'
+        WHEN dept = 'P' THEN '기획부'
+        WHEN dept = 'H' THEN '인사부'
+        ELSE '부서미정' END AS deptCase,  
+		CASE WHEN position = 'A' THEN '관리자'
+   	 	WHEN position = 'C' THEN '대표'
+        WHEN position = 'D' THEN '부장'
+        WHEN position = 'L' THEN '팀장'
+        WHEN position = 'E' THEN '사원'
+        ELSE '직급미정' END AS positionCase
+		FROM user 
+		WHERE 1=1 
+		<if test="dept != null">
+        	and dept = #{dept} 
+        </if>
+        <if test="position != null">
+        	and position = #{position} 
+        </if>
+        <if test="searchName != null">
+        	and name like CONCAT('%', #{searchName}, '%') 
+        </if>
+        ;
+	</select>
+	
+	<update id="updateUser" parameterType="employeeVO">
+		UPDATE user SET 
+		password = #{password}, 
+		phone = #{phone}, 
+		email = #{email}, 
+		addr = #{addr} 
+		WHERE userid = #{userid};
+	</update>
+	
+	<update id="updateFromAdmin" parameterType="employeeVO">
+		UPDATE user 
+		<trim prefix="SET" suffixOverrides=",">
+			<if test='password != null and !password.equals("")'>
+				password = #{password}, 
+			</if>
+			<if test='name != null and !name.equals("")'>
+				name = #{name}, 
+			</if>
+			<if test='dept != null and !dept.equals("")'>
+				dept = #{dept}, 
+			</if>
+			<if test='position != null and !position.equals("")'>
+				position = #{position}, 
+			</if>
+			<if test='state != null and !state.equals("")'>
+				state = #{state}, 
+			</if>
+			<if test='phone != null and !phone.equals("")'>
+				phone = #{phone}, 
+			</if>
+			<if test='email != null and !email.equals("")'>
+				email = #{email}, 
+			</if>
+			<if test='addr != null and !addr.equals("")'>
+				addr = #{addr}, 
+			</if>
+			<if test='position != null and !position.equals("")'>
+				authority = 
+				<choose>
+					<when test='position == "E"'>
+						'ROLE_EMPLOYEE', 
+					</when>
+					<when test='position == "L"'>
+						'ROLE_LEADER', 
+					</when>
+					<when test='position == "D"'>
+						'ROLE_DIRECTOR', 
+					</when>
+					<when test='position == "A"'>
+						'ROLE_ADMIN', 
+					</when>
+					<when test='position == "C"'>
+						'ROLE_CEO', 
+					</when>
+				</choose>
+			</if>
+   		</trim>
+		WHERE userid = #{userid};
+	</update>
+	
+</mapper>
+
+
+

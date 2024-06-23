@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Config 3.0//EN"
+			"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="edu.hrms.mappers.alarmMapper">
+	
+	<insert id="insertAlarm" parameterType="map">
+		INSERT INTO alarm() VALUES();
+		<selectKey keyProperty="alarmNo" resultType="int" order="AFTER" >
+			select LAST_INSERT_ID() as id
+		</selectKey>
+	</insert>
+	
+	<select id="selectAlarm" parameterType="int" resultType="alarmVO">
+		(SELECT d.userid, a.alarmNo, a.rdate, a.state as alarmState, d.docNo as contentNo, SUBSTRING(d.title, 1, 5)  AS content, d.state as state, '기안' as type 
+		FROM alarm a INNER JOIN doc d ON a.alarmNo = d.alarmNo 
+		WHERE d.userid = #{userid} and a.state = 0 and (d.state = 2 or d.state = 3))
+		UNION
+		(SELECT v.userid, a.alarmNo, a.rdate, a.state as alarmState, v.vacaNo as contentNo, SUBSTRING(v.reason, 1, 5)  AS content, v.state as state, '연차' as type 
+		FROM alarm a INNER JOIN vacation v ON a.alarmNo = v.alarmNo 
+		WHERE v.userid = #{userid} and a.state = 0 and (v.state = 2 or v.state = 3))
+		UNION
+		(SELECT o.userid, a.alarmNo, a.rdate, a.state as alarmState, o.overTimeNo as contentNo, SUBSTRING(o.content, 1, 5)  AS content, o.state as state, '초과근무' as type 
+		FROM alarm a INNER JOIN overtime o ON a.alarmNo = o.alarmNo 
+		WHERE o.userid = #{userid} and a.state = 0 and (o.state = 2 or o.state = 3)) 
+		ORDER BY rdate DESC Limit 10;
+	</select>
+	
+	<update id="updateAlarmRead" parameterType="int">
+		UPDATE alarm SET state = '1' WHERE alarmNo = #{alarmNo};
+	</update>
+	
+</mapper>
+
+
+

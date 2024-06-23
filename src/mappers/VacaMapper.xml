@@ -1,0 +1,262 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Config 3.0//EN"
+			"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="edu.hrms.mappers.vacaMapper">
+	
+	<select id="selectMyVacaList" parameterType="vacaVO" resultType="vacaVO">
+		<![CDATA[
+		SELECT vacaNo, userid, rdate, reason, 
+				(CASE state
+					WHEN 0 THEN '대기'
+					WHEN 1 THEN '진행중'
+					WHEN 2 THEN '승인'
+					WHEN 3 THEN '반려'
+					WHEN 7 THEN '사용 완료'
+					WHEN 9 THEN '철회' END
+				) AS state
+				, startTime, endTime, startDate, endDate
+				, (CASE DAYOFWEEK(startDate) 
+						WHEN '1' THEN '(일)'
+						WHEN '2' THEN '(월)'
+						WHEN '3' THEN '(화)'
+						WHEN '4' THEN '(수)'
+						WHEN '5' THEN '(목)'
+						WHEN '6' THEN '(금)'
+						WHEN '7' THEN '(토)'
+						END) startDate_dayOfWeek
+				, (CASE DAYOFWEEK(endDate) 
+						WHEN '1' THEN '(일)'
+						WHEN '2' THEN '(월)'
+						WHEN '3' THEN '(화)'
+						WHEN '4' THEN '(수)'
+						WHEN '5' THEN '(목)'
+						WHEN '6' THEN '(금)'
+						WHEN '7' THEN '(토)'
+						END) endDate_dayOfWeek
+            , duration
+			FROM (SELECT *, DATEDIFF(endDate, startDate)+1 as duration
+						FROM vacation
+						WHERE userid = #{userid}]]>
+							<if test='startDate != null and endDate == null'>
+								AND startDate <![CDATA[>=]]> #{startDate}
+				 			</if>
+				 			<if test='startDate == null and endDate != null'>
+								AND startDate <![CDATA[<=]]> #{endDate}
+				 			</if>
+							<if test='startDate != null and endDate != null'>
+								AND startDate BETWEEN #{startDate} AND #{endDate}
+				 			</if>
+				 	) vaca_temp
+			ORDER BY startDate DESC, vacaNo DESC;
+	</select>
+	
+	<select id="myRecentVacaApplication" parameterType="String" resultType="vacaVO">
+		SELECT startDate, endDate
+			, LEFT(startTime,5) AS startTime
+			, LEFT(endTime,5) AS endTime, 
+			(CASE state
+				WHEN 0 THEN '대기'
+				WHEN 1 THEN '진행중'
+				WHEN 2 THEN '승인'
+				WHEN 3 THEN '반려'
+				WHEN 7 THEN '사용 완료'
+				WHEN 9 THEN '철회' END) AS state
+			FROM vacation 
+			WHERE vacaNo = (SELECT MAX(vacaNo) FROM vacation WHERE userid = #{userid});
+	</select>
+	
+	<select id="myRemainVaca" parameterType="String" resultType="Map">
+		SELECT keepVaca, useVaca,
+				ROUND(keepVaca/8,0) keepVaca_day,
+				ROUND(useVaca/8,0) useVaca_day
+			FROM user
+			WHERE userid = #{userid}
+	</select>
+	
+	<select id="checkVacaAppCnt" parameterType="vacaVO" resultType="int">
+		SELECT COUNT(*) 
+			FROM vacation
+			WHERE state NOT IN (3,9)
+				AND ((#{startDate} BETWEEN startDate AND endDate)
+	      			OR (#{endDate} BETWEEN startDate AND endDate))
+	      	AND userid = #{userid};
+	</select>
+	
+	
+	<insert id="insertVaca" parameterType="vacaVO">
+		INSERT INTO vacation (userid, reason, startTime, endTime, startDate, endDate)
+						  VALUES (#{userid}, #{reason}, #{startTime}, #{endTime}, #{startDate}, #{endDate})
+	</insert>
+	
+	<select id="getMaxNoByUserId" parameterType="String" resultType="int">
+		SELECT MAX(vacaNo) vacaNo 
+			FROM vacation 
+			WHERE userid = #{userid}
+	</select>
+	
+	<insert id="insertVacaSign" parameterType="java.util.List">
+		INSERT INTO vacasign (vacaNo, signLineNo) VALUES
+			<foreach collection="list" index="index" item="item" separator=",">
+				(#{item.vacaNo}, #{item.signLineNo})
+			</foreach>
+	</insert>
+	
+	<select id="selectVacaByVacaNo" parameterType="int" resultType="vacaVO">
+		SELECT v.vacaNo, v.userid, v.startDate, v.endDate
+			, DATE_FORMAT(v.startTime, '%H:%i') AS startTime
+			, DATE_FORMAT(v.endTime, '%H:%i') AS endTime
+			, v.state, reason, rdate, u.name
+			FROM vacation v
+			INNER JOIN user u ON v.userid = u.userid
+			WHERE vacaNo = #{vacaNo}
+	</select>
+	
+	<select id="getVacaSignList" parameterType="int" resultType="vacaSignVO">
+		SELECT vs.*, u.name, u.dept, 
+				(CASE 
+					WHEN u.position = 'C' THEN '대표'
+	            WHEN u.position = 'D' THEN '부장'
+	            WHEN u.position = 'L' THEN '팀장'
+	            WHEN u.position = 'E' THEN '사원' END
+				) AS position
+	        	, s.signorder,
+	        	LAG(vs.state) OVER() AS prev_state
+			FROM vacasign vs
+			INNER JOIN signLine s ON vs.signLineNo = s.signLineNo
+		   INNER JOIN user u ON s.userid = u.userid
+		   WHERE vs.vacaNo = #{vacaNo}
+		   ORDER BY signOrder
+	</select>
+	
+	<update id="withdrawal" parameterType="int">
+		UPDATE vacation
+			SET state = 9
+			WHERE vacaNo = #{vacaNo}
+	</update>
+	
+	<delete id="vacaSignDelete" parameterType="int">
+		DELETE FROM vacasign
+			WHERE vacaNo = #{vacaNO}
+	</delete>
+	
+	<select id="selectVacaListToUpdate" parameterType="String" resultType="VacaVo">
+		SELECT *
+			FROM vacation
+			WHERE state = 2
+				AND startDate = #{today}
+	</select>
+	
+	<update id="minusUserVaca" parameterType="java.util.List">
+		<foreach collection="list" item="item">
+			UPDATE user 
+				SET useVaca = useVaca + #{item.useVaca}
+					, keepVaca = keepVaca - #{item.useVaca}
+				WHERE userid = #{item.userid};
+		</foreach>
+	</update>
+	
+	<update id="updateVacaStateToUse" parameterType="java.util.List">
+		<foreach collection="list" item="item">
+			UPDATE vacation
+				SET state = 7
+				WHERE userid = #{item.userid}
+					AND startDate = #{item.startDate};
+		</foreach>
+	</update>
+
+
+	<select id="selectAllVacaList" parameterType="Map" resultType="vacaVO">
+		SELECT v.*, u.name,
+				(CASE 
+					WHEN u.position = 'C' THEN '대표'
+	            WHEN u.position = 'D' THEN '부장'
+	            WHEN u.position = 'L' THEN '팀장'
+	            WHEN u.position = 'E' THEN '사원' END
+				) AS position,
+				(CASE 
+					WHEN u.dept = 'M' THEN '대표'
+	            WHEN u.dept = 'D' THEN '개발부'
+	            WHEN u.dept = 'S' THEN '영업부'
+	            WHEN u.dept = 'P' THEN '기획부'
+	            WHEN u.dept = 'H' THEN '인사부' END
+				) AS dept
+			FROM vacation v
+		   INNER JOIN user u
+				ON v.userid = u.userid
+				WHERE 1=1
+				<if test="array != null">
+					AND v.state IN
+					<foreach item="item" collection="array" open="(" separator="," close=")">
+			  			#{item}
+				  	</foreach>
+			  	</if>
+			  	<if test="userid != null">
+			  		AND v.userid = #{userid}
+			  	</if>
+		  		ORDER BY v.startDate DESC
+	</select>
+
+	<select id="getCountOfAllUserList" parameterType="Map" resultType="int">
+		SELECT COUNT(*)
+			FROM user u
+			WHERE 1=1
+ 			<if test='searchVO != null'>
+	 			<if test='searchVO.category_dept != null and !searchVO.category_dept.equals("")'>
+			 		AND u.dept = #{searchVO.category_dept}
+	 			</if>
+	 			<if test='searchVO.category_position != null and !searchVO.category_position.equals("")'>
+			 		AND u.position = #{searchVO.category_position}
+	 			</if>
+	 			<if test='searchVO.searchVal != null and !searchVO.searchVal.equals("")'>
+					AND u.name LIKE CONCAT('%', #{searchVO.searchVal}, '%')
+				</if>
+ 			</if>
+	</select>
+	
+	<select id="selectAllUserList" parameterType="Map" resultType="Map">
+		SELECT userid, name, keepVaca, useVaca,
+				ROUND(keepVaca/8,0) keepVaca_day,
+				ROUND(useVaca/8,0) useVaca_day,
+				(CASE 
+					WHEN u.position = 'C' THEN '대표'
+	            WHEN u.position = 'D' THEN '부장'
+	            WHEN u.position = 'L' THEN '팀장'
+	            WHEN u.position = 'E' THEN '사원' 
+	            ELSE '관리자' END
+				) AS position,
+				(CASE 
+					WHEN u.dept = 'M' THEN '대표'
+	            WHEN u.dept = 'D' THEN '개발부'
+	            WHEN u.dept = 'S' THEN '영업부'
+	            WHEN u.dept = 'P' THEN '기획부'
+	            WHEN u.dept = 'H' THEN '인사부' END
+				) AS dept
+			FROM user u
+			WHERE u.position != 'A'
+			<if test='searchVO != null'>
+	 			<if test='searchVO.category_dept != null and !searchVO.category_dept.equals("")'>
+			 		AND u.dept = #{searchVO.category_dept}
+	 			</if>
+	 			<if test='searchVO.category_position != null and !searchVO.category_position.equals("")'>
+			 		AND u.position = #{searchVO.category_position}
+	 			</if>
+	 			<if test='searchVO.searchVal != null and !searchVO.searchVal.equals("")'>
+					AND u.name LIKE CONCAT('%', #{searchVO.searchVal}, '%')
+				</if>
+ 			</if>
+ 			ORDER BY FIELD(dept, 'M', 'D', 'S', 'P', 'H'),
+ 					 	FIELD(position, 'D', 'L', 'E')
+ 			LIMIT #{pagingVO.startLimit}, #{pagingVO.perPage}
+	</select>
+	
+	<update id="giveVaca" parameterType="Map">
+		UPDATE user
+			SET keepVaca = keepVaca + #{hour}
+			<if test='hour lt 0'>
+				, useVaca = useVaca - #{hour}
+			</if>
+			WHERE userid = #{userid}
+	</update>
+	
+	
+</mapper>

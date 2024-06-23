@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Config 3.0//EN"
+			"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="edu.hrms.mapper.messageMapper">
+	<select id="selectReceiverAll" resultType="msgReceiveVO">
+		SELECT userid, name, dept, 
+		CASE WHEN dept = 'M' THEN '관리부'
+   	 	WHEN dept = 'D' THEN '개발부'
+        WHEN dept = 'S' THEN '영업부'
+        WHEN dept = 'P' THEN '기획부'
+        WHEN dept = 'H' THEN '인사부'
+        ELSE '부서미정' END AS deptCase, 
+		CASE WHEN position = 'A' THEN '관리자'
+   	 	WHEN position = 'C' THEN '대표'
+        WHEN position = 'D' THEN '부장'
+        WHEN position = 'L' THEN '팀장'
+        WHEN position = 'E' THEN '사원'
+        ELSE '직급미정' END AS position FROM user;
+	</select>
+	
+	<select id="selectDeptCount" resultType="Map">
+		SELECT dept, 
+		CASE WHEN dept = 'M' THEN '관리부'
+   	 	WHEN dept = 'D' THEN '개발부'
+        WHEN dept = 'S' THEN '영업부'
+        WHEN dept = 'P' THEN '기획부'
+        WHEN dept = 'H' THEN '인사부'
+        ELSE '부서미정' END AS deptCase, count(dept) as count from user group by dept;
+	</select>
+	
+	<insert id="insertMsg" parameterType="Map">
+		INSERT INTO msg(userid, content) values(#{userId}, #{content});
+		<selectKey keyProperty="msgNo" resultType="int" order="AFTER" >
+			select LAST_INSERT_ID() as id
+		</selectKey>
+	</insert>
+	
+	<insert id="insertMsgReceive" parameterType="Map">
+		INSERT INTO msgReceive(msgNo, userid) values
+		<foreach collection="receiver" item="rec" separator=",">
+			(#{msgNo}, #{rec})
+		</foreach>
+	</insert>
+	
+	<select id="selectMsgAll" parameterType="Map" resultType="msgVO">
+		SELECT u.userid, u.name,
+		CASE WHEN u.dept = 'M' THEN '관리부'
+   	 	WHEN u.dept = 'D' THEN '개발부'
+        WHEN u.dept = 'S' THEN '영업부'
+        WHEN u.dept = 'P' THEN '기획부'
+        WHEN u.dept = 'H' THEN '인사부'
+        ELSE '부서미정' END AS dept, 
+		CASE WHEN u.position = 'A' THEN '관리자'
+   	 	WHEN u.position = 'C' THEN '대표'
+        WHEN u.position = 'D' THEN '부장'
+        WHEN u.position = 'L' THEN '팀장'
+        WHEN u.position = 'E' THEN '사원'
+        ELSE '직급미정' END AS position,
+        m.msgNo, m.content, m.sendDate, mr.msgRNo,
+        mr.state FROM user u INNER JOIN msg m on u.userid = m.userid INNER JOIN msgReceive mr on m.msgNO = mr.msgNo 
+        WHERE mr.userid = #{userId} 
+        <if test="dept != null">
+        	and u.dept = #{dept} 
+        </if>
+        <if test="position != null">
+        	and u.position = #{position} 
+        </if>
+        <if test="searchName != null">
+        	and  u.name like CONCAT('%', #{searchName}, '%') 
+        </if>
+        ORDER BY m.sendDate DESC 
+        <if test="pagingVO != null">
+        	LIMIT #{pagingVO.startLimit}, #{pagingVO.perPage}
+        </if>
+        ;
+	</select>
+	
+	<select id="selectMsgAllNav" parameterType="int" resultType="msgVO">
+		SELECT u.userid, u.name,
+		CASE WHEN u.dept = 'M' THEN '관리부'
+   	 	WHEN u.dept = 'D' THEN '개발부'
+        WHEN u.dept = 'S' THEN '영업부'
+        WHEN u.dept = 'P' THEN '기획부'
+        WHEN u.dept = 'H' THEN '인사부'
+        ELSE '부서미정' END AS dept, 
+		CASE WHEN u.position = 'A' THEN '관리자'
+   	 	WHEN u.position = 'C' THEN '대표'
+        WHEN u.position = 'D' THEN '부장'
+        WHEN u.position = 'L' THEN '팀장'
+        WHEN u.position = 'E' THEN '사원'
+        ELSE '직급미정' END AS position,
+        m.msgNo, m.content, m.sendDate, mr.msgRNo,
+        mr.state FROM user u INNER JOIN msg m on u.userid = m.userid INNER JOIN msgReceive mr on m.msgNO = mr.msgNo 
+        WHERE mr.userid = #{userId} AND mr.state = 0 ORDER BY m.sendDate DESC;
+	</select>
+	
+	<select id="selectMsgReceiveAll" parameterType="int" resultType="msgVO">
+		SELECT mr.userid, u.name, 
+		CASE WHEN u.dept = 'M' THEN '관리부'
+   	 	WHEN u.dept = 'D' THEN '개발부'
+        WHEN u.dept = 'S' THEN '영업부'
+        WHEN u.dept = 'P' THEN '기획부'
+        WHEN u.dept = 'H' THEN '인사부'
+        ELSE '부서미정' END AS dept, 
+		CASE WHEN u.position = 'A' THEN '관리자'
+   	 	WHEN u.position = 'C' THEN '대표'
+        WHEN u.position = 'D' THEN '부장'
+        WHEN u.position = 'L' THEN '팀장'
+        WHEN u.position = 'E' THEN '사원'
+        ELSE '직급미정' END AS position,
+		m.msgNo, m.content, m.sendDate, mr.msgRno,
+        mr.state FROM user u INNER JOIN msgReceive mr on u.userid = mr.userid INNER JOIN msg m on mr.msgNo = m.msgNo 
+        WHERE m.userid= #{userId} 
+        <if test="dept != null">
+        	and u.dept = #{dept} 
+        </if>
+        <if test="position != null">
+        	and u.position = #{position} 
+        </if>
+        <if test="searchName != null">
+        	and  u.name like CONCAT('%', #{searchName}, '%') 
+        </if>
+        ORDER BY m.sendDate DESC 
+        <if test="pagingVO != null">
+        	LIMIT #{recPagingVO.startLimit}, #{recPagingVO.perPage}
+        </if>
+        ;
+	</select>
+	
+	<update id="updateMsgRead" parameterType="int">
+		UPDATE msgReceive SET state = 1 WHERE msgRNo = #{msgRNo};
+	</update>
+	
+	<delete id="deleteMsgReceive" parameterType="int">
+		DELETE FROM msgReceive WHERE msgRNo = #{msgRNo} AND state = 0;
+	</delete>
+</mapper>

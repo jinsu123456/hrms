@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Config 3.0//EN"
+			"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="edu.hrms.mapper.noticeMapper">
+
+	<select id="getNoticeCount" parameterType="Map" resultType="int">
+		SELECT COUNT(*) FROM notice;  
+	</select> 
+	
+	<select id="selectNotice" parameterType="Map" resultType="noticeVO">
+		SELECT * FROM notice
+			WHERE delyn = 'n' ORDER BY rdate DESC
+		<if test="pagingVO != null">
+       		LIMIT #{pagingVO.startLimit}, #{pagingVO.perPage}
+        </if>
+	</select>
+	
+	<select id="selectNoticeByNoticeNo" resultType="noticeVO" parameterType="int">
+		SELECT * FROM notice WHERE noticeNo = #{noticeNo}
+	</select>
+	
+	<select id="selectNoticeFileByNoticeNo" resultType="noticeFileVO">
+		SELECT * FROM noticefile WHERE noticeNo = #{noticeNo}
+	</select>
+	
+	<insert id="insertNotice" parameterType="noticeVO">
+		INSERT INTO notice(userid
+		     		   , title
+		     		   , content
+		     		   , rdate)
+		          VALUES (#{userid}
+		               , #{title}
+		               , #{content}
+		               , now())
+		<selectKey order="AFTER" keyProperty="noticeNo" resultType="int">
+		 	SELECT MAX(noticeNo) FROM notice
+		</selectKey>          
+	</insert>
+	
+	<select id="getMaxNoByUserId" parameterType="int" resultType="int">
+		SELECT MAX(noticeNo) noticeNo
+			FROM notice
+			WHERE userid = #{userid}
+	</select>
+	
+	<delete id="deleteNoticeFiles" parameterType="Map">
+		DELETE FROM noticefile
+			WHERE noticeNo = #{noticeNo}
+				<if test="array != null">
+					AND originNm IN 
+					<foreach item="item" collection="array" open="(" separator="," close=")">
+			  			#{item}
+				  	</foreach>
+			  	</if>
+	</delete>
+	
+	<update id="updateNotice" parameterType="noticeVO">
+		UPDATE notice 
+		SET title = #{title},
+			content = #{content}
+		WHERE noticeNo = #{noticeNo}
+	</update>
+	
+	<insert id="insertNoticeFile" parameterType="java.util.List">
+		INSERT INTO noticefile (noticeNo, realNm, originNm)
+			VALUES 
+			<foreach collection="list" index="index" item="item" separator=",">
+				(#{item.noticeNo}, #{item.realNm}, #{item.originNm})
+			</foreach>
+	</insert>
+		
+	<update id="delyn" parameterType="int">
+		UPDATE notice
+		SET delyn = 'y'
+		WHERE noticeNo = #{noticeNo}
+	</update>
+	
+</mapper>
+
+
+

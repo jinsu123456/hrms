@@ -1,0 +1,351 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Config 3.0//EN"
+			"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="edu.hrms.mappers.workMapper">
+	
+	<select id="selectMyWork" parameterType="java.util.Map" resultType="edu.hrms.vo.WorkVO">
+		SELECT * FROM work
+			WHERE userid = #{userid} 
+				AND date = #{today}
+	</select>
+	
+	<select id="selectMyThisWeekWorkTime" parameterType="java.util.Map" resultType="String">
+	<![CDATA[
+		SELECT IFNULL(
+							SEC_TO_TIME(SUM(TIME_TO_SEC(
+																IF(start<='12:00:00' AND end>='13:00:00'
+																	, SUBTIME(subtime_nolunchtime,'01:00:00')
+																	, subtime_nolunchtime))))
+            		,'00:00:00')
+             	AS total
+			FROM (SELECT *, SUBTIME(
+											IF(end>'18:00:00',IF(start>='18:00:00',end,'18:00:00'),IF(end BETWEEN '12:00:01' AND '12:59:59','13:00:00',end)), 
+											IF(start<'09:00:00','09:00:00',IF(start BETWEEN '12:00:00' AND '12:59:59','12:00:00',start))
+											) AS subtime_nolunchtime
+					FROM work
+            	WHERE userid = #{userid} AND	
+							date BETWEEN #{startDay} AND #{endDay}) work_temp]]>
+	</select>
+	
+	<select id="selectMyThisWeekOvertimeTime" parameterType="java.util.Map" resultType="String">
+		SELECT IFNULL(SEC_TO_TIME(SUM(TIME_TO_SEC(SUBTIME(end, start)))),'00:00:00')
+			FROM overtime
+    		WHERE userid = #{userid}
+    			AND date BETWEEN #{startDay} and #{endDay}
+				AND state = 2
+	</select>
+	
+	<select id="selectMyThisWeekTotalWorkTime" parameterType="java.util.Map" resultType="String">
+		SELECT SEC_TO_TIME(TIME_TO_SEC(#{workTime})+IFNULL(TIME_TO_SEC(#{overtimeTime}),TIME_TO_SEC('00:00:00'))) AS result 
+			FROM DUAL;
+	</select>
+	
+	<insert id="insert" parameterType="java.util.Map">	
+		INSERT INTO work (userid, date, start) 
+		          VALUES (#{userid} , #{date} , #{time})
+	</insert>
+	
+	<update id="update" parameterType="java.util.Map">
+		UPDATE work 
+			SET end = #{time}
+		   WHERE userid = #{userid}
+		   	AND date = #{today}
+	</update>
+	
+	<update id="withdrawal" parameterType="int">
+		UPDATE overtime
+			SET state = 9
+			WHERE overtimeNo = #{overtimeNo}
+	</update>
+	
+	<update id="updateOvertime" parameterType="java.util.Map">
+		UPDATE overtime 
+			SET end = #{end}
+		   WHERE overtimeNo = #{overtimeNo}
+		   	AND state NOT IN (3,9)
+	</update>
+	
+	<select id="overtimeApplicationToday" parameterType="Map" resultType="overtimeVO">
+		SELECT *
+			FROM overtime
+			WHERE userid = #{userid}
+				AND date = #{today} 
+				AND start = '12:00:00'
+				AND state NOT IN (3,9)
+		UNION
+		SELECT *
+			FROM overtime
+			WHERE userid = #{userid}
+				AND date = #{today}
+				AND start != '12:00:00' 
+				AND state NOT IN (3,9)
+	</select>
+	
+	<insert id="insertOvertime" parameterType="java.util.Map">	
+		INSERT INTO overtime (userid, date, start, end, content) 
+						VALUES   (#{userid}, #{today}, #{start}, #{end}, #{content})
+	</insert>
+	
+	<select id="getSignLineList" parameterType="java.util.Map" resultType="edu.hrms.vo.SignLineVO">
+		SELECT s.signLineNo, s.userid, u.name, 
+				(CASE 
+					WHEN u.dept = 'M' THEN '대표'
+	            WHEN u.dept = 'D' THEN '개발부'
+	            WHEN u.dept = 'S' THEN '영업부'
+	            WHEN u.dept = 'P' THEN '기획부'
+	            WHEN u.dept = 'H' THEN '인사부' END
+				) AS dept, 
+				(CASE 
+					WHEN u.position = 'C' THEN '대표'
+	            WHEN u.position = 'D' THEN '부장'
+	            WHEN u.position = 'L' THEN '팀장'
+	            WHEN u.position = 'E' THEN '사원' END
+				) AS position
+				, s.type, s.signOrder 
+			FROM signLine s 
+			INNER JOIN user u ON s.userid = u.userid
+			WHERE (type=#{type} OR type='A') AND
+		  			(SUBSTRING(s.userid,1,2) = SUBSTRING(#{userid},1,2) OR s.userid='99000') AND
+		  			u.position IN 
+		  			<foreach item="item" index="index" collection="positionArr" open="(" separator="," close=")">
+		  				#{item}
+		  			</foreach>
+		  	ORDER BY signOrder
+	</select>
+	
+	<select id="getMaxNoByUserId" parameterType="String" resultType="int">
+		SELECT * FROM overtime 
+			WHERE overtimeNo = (SELECT MAX(overtimeNo) FROM overtime WHERE userid = #{userid})
+	</select>
+	
+	<insert id="insertOvertimeSign" parameterType="java.util.List">
+		INSERT INTO overtimesign (overtimeNo, signLineNo) VALUES
+			<foreach collection="list" index="index" item="item" separator=",">
+				(#{item.overtimeNo}, #{item.signLineNo})
+			</foreach>
+	</insert>
+	
+	
+	<select id="selectAllMyWork" parameterType="java.util.Map" resultType="edu.hrms.vo.WorkVO">
+		SELECT wno, userid, date, start, end
+				, GROUP_CONCAT(temp.overtime_state) overtime_state
+				, GROUP_CONCAT(overtime) overtime
+				, MAX(total) total
+				, dayOfWeek
+			FROM (SELECT w.wno, w.userid, w.date, w.start
+							, IFNULL(w.end,'-') AS end
+							, (CASE o.state
+					      		WHEN 0 THEN '(결재 대기)'
+					      		WHEN 1 THEN '(결재 진행중)'
+					      		WHEN 2 THEN '(승인)' END
+							   ) overtime_state
+							, IFNULL((SUBTIME(o.end, o.start)),'-') AS overtime
+		               , IFNULL(ADDTIME(IF(w.start<![CDATA[<]]>'13:00:00' AND w.end<![CDATA[>]]>'13:00:00'
+														, SUBTIME(subtime_nolunchtime, '01:00:00')
+														, subtime_nolunchtime
+										   	  	  )
+										 		  , IF(o.state = 2
+														  , SUBTIME(o.end, o.start)
+														  , "00:00:00")
+												 )
+										 ,'-'
+										) AS total
+		               , (CASE DAYOFWEEK(w.date) 
+									WHEN '1' THEN '(일)'
+									WHEN '2' THEN '(월)'
+									WHEN '3' THEN '(화)'
+									WHEN '4' THEN '(수)'
+									WHEN '5' THEN '(목)'
+									WHEN '6' THEN '(금)'
+									WHEN '7' THEN '(토)' END
+							  ) dayOfWeek
+						FROM (SELECT *, SUBTIME(  
+														IF(end<![CDATA[>]]>'18:00:00',IF(start<![CDATA[>]]>'18:00:00',end,'18:00:00'),IF(end BETWEEN '12:00:01' AND '12:59:59','13:00:00',end)), 
+														IF(start<![CDATA[<]]>'09:00:00','09:00:00',IF(start BETWEEN '12:00:00' AND '12:59:59','12:00:00',start))
+													  ) AS subtime_nolunchtime
+									FROM work
+									WHERE userid = #{userid}
+								) AS w
+						LEFT JOIN overtime o ON w.userid = o.userid 
+								AND w.date = o.date
+								AND o.state NOT IN (3,9)
+						WHERE w.userid = #{userid}
+						<if test='startDate == null'>
+							AND w.date <![CDATA[<=]]> #{endDate}
+			 			</if>
+						<if test='startDate != null'>
+							AND w.date BETWEEN #{startDate} AND #{endDate}
+			 			</if>
+	 			  ) temp
+	 		GROUP BY date, wno
+			ORDER BY date DESC
+	</select>
+	
+	<select id="selectAllMyOvertime" parameterType="java.util.Map" resultType="edu.hrms.vo.OvertimeVO">
+		SELECT *, SEC_TO_TIME((TIME_TO_SEC(SUBTIME(end, start)))) AS total 
+				, (CASE DAYOFWEEK(date) 
+						WHEN '1' THEN '(일)'
+						WHEN '2' THEN '(월)'
+						WHEN '3' THEN '(화)'
+						WHEN '4' THEN '(수)'
+						WHEN '5' THEN '(목)'
+						WHEN '6' THEN '(금)'
+						WHEN '7' THEN '(토)'
+						END) dayOfWeek
+			FROM overtime
+   		WHERE userid = #{userid} 
+   			<if test='startDate == null'>
+					AND date <![CDATA[<=]]> #{endDate}
+	 			</if>
+				<if test='startDate != null'>
+					AND date BETWEEN #{startDate} AND #{endDate}
+	 			</if>
+   		ORDER BY date DESC, overtimeNo DESC
+	</select>
+	
+	<select id="selectOvertime" parameterType="int" resultType="edu.hrms.vo.OvertimeVO">
+		SELECT o.overtimeNo, o.userid, o.date, DATE_FORMAT(start, '%H:%i') AS start, DATE_FORMAT(end, '%H:%i') AS end, o.state, content, rdate, u.name
+			FROM overtime o
+			INNER JOIN user u ON o.userid = u.userid
+			WHERE overtimeNo = #{overtimeNo}
+	</select>
+	
+	<select id="getOvertimeSignList" parameterType="int" resultType="edu.hrms.vo.OvertimeSignVO">
+		SELECT os.*, u.name, u.dept, 
+				(CASE 
+					WHEN u.position = 'C' THEN '대표'
+	            WHEN u.position = 'D' THEN '부장'
+	            WHEN u.position = 'L' THEN '팀장'
+	            WHEN u.position = 'E' THEN '사원' END
+				) AS position
+	        	, s.signOrder,
+	        	LAG(os.state) OVER() AS prev_state
+			FROM overtimesign os
+			INNER JOIN signLine s ON os.signLineNo = s.signLineNo
+		   INNER JOIN user u ON s.userid = u.userid
+		   WHERE os.overtimeNo = #{overtimeNo}
+		   ORDER BY signOrder
+	</select>
+	
+	<delete id="overtimesignDelete" parameterType="int">
+		DELETE FROM overtimesign
+			WHERE overtimeNo = #{overtimeNO}
+	</delete>
+	
+	<select id="selectAllWork" parameterType="Map" resultType="edu.hrms.vo.WorkVO">
+		SELECT wno, userid, date, start, end, name, dept, position
+				, GROUP_CONCAT(temp.overtime_state) overtime_state
+				, GROUP_CONCAT(overtime) overtime
+				, MAX(total) total
+				, dayOfWeek
+			FROM (SELECT w.wno, w.userid, w.date, w.start, u.name
+							, IFNULL(w.end,'-') AS end
+							, (CASE o.state
+					      		WHEN 0 THEN '(결재 대기)'
+					      		WHEN 1 THEN '(결재 진행중)'
+					      		WHEN 2 THEN '(승인)' END
+							   ) overtime_state
+							, IFNULL((SUBTIME(o.end, o.start)),'-') AS overtime
+		               , IFNULL(ADDTIME(IF(w.start<![CDATA[<]]>'13:00:00' AND w.end<![CDATA[>]]>'13:00:00'
+														, SUBTIME(subtime_nolunchtime, '01:00:00')
+														, subtime_nolunchtime
+										   	  	  )
+										 		  , IF(o.state = 2
+														  , SUBTIME(o.end, o.start)
+														  , "00:00:00")
+												 )
+										 ,'-'
+										) AS total
+		               , (CASE DAYOFWEEK(w.date) 
+									WHEN '1' THEN '(일)'
+									WHEN '2' THEN '(월)'
+									WHEN '3' THEN '(화)'
+									WHEN '4' THEN '(수)'
+									WHEN '5' THEN '(목)'
+									WHEN '6' THEN '(금)'
+									WHEN '7' THEN '(토)' END
+							  ) dayOfWeek
+							 , (CASE
+									WHEN u.dept = 'M' THEN 'CEO'
+				               WHEN u.dept = 'D' THEN '개발부'
+									WHEN u.dept = 'S' THEN '영업부'
+				               WHEN u.dept = 'P' THEN '기획부'
+				               WHEN u.dept = 'H' THEN '인사부' END
+								 ) AS dept
+								, (CASE 
+									WHEN u.position = 'C' THEN '대표'
+									WHEN u.position = 'D' THEN '부장'
+									WHEN u.position = 'L' THEN '팀장'
+									WHEN u.position = 'E' THEN '사원' END
+								 ) AS position
+						FROM (SELECT *, SUBTIME(  
+														IF(end<![CDATA[>]]>'18:00:00',IF(start<![CDATA[>]]>'18:00:00',end,'18:00:00'),IF(end BETWEEN '12:00:01' AND '12:59:59','13:00:00',end)), 
+														IF(start<![CDATA[<]]>'09:00:00','09:00:00',IF(start BETWEEN '12:00:00' AND '12:59:59','12:00:00',start))
+													  ) AS subtime_nolunchtime
+									FROM work
+								) AS w
+						INNER JOIN user u 
+								ON w.userid = u.userid
+						LEFT JOIN overtime o ON w.userid = o.userid 
+								AND w.date = o.date
+								AND o.state NOT IN (3,9)
+						WHERE u.dept IN
+							<foreach item="item" index="index" collection="deptArr" open="(" separator="," close=")">
+						  				#{item}
+						  	</foreach>
+							<if test='startDate == null'>
+								AND w.date <![CDATA[<=]]> #{endDate}
+				 			</if>
+							<if test='startDate != null'>
+								AND w.date BETWEEN #{startDate} AND #{endDate}
+				 			</if>
+				 			<if test='category_dept!=null and !category_dept.equals("")'>
+						 		AND u.dept = #{category_dept}
+				 			</if>
+				 			<if test='category_position!=null and !category_position.equals("")'>
+						 		AND u.position = #{category_position}
+				 			</if>
+				 			<if test='searchVal != null'>
+								AND u.name LIKE CONCAT('%', #{searchVal}, '%')
+				 			</if>
+ 				) temp
+ 		GROUP BY date, wno
+		ORDER BY date DESC LIMIT #{pagingVO.startLimit}, #{pagingVO.perPage}
+	</select>
+	
+	<select id="getCountOfAllWorkList" parameterType="Map" resultType="int">
+		SELECT COUNT(*)
+			FROM work w
+			INNER JOIN user u
+				ON w.userid = u.userid
+			WHERE u.dept IN
+			<foreach item="item" index="index" collection="deptArr" open="(" separator="," close=")">
+		  				#{item}
+		  	</foreach>
+			<if test='startDate == null'>
+				AND w.date <![CDATA[<=]]> #{endDate}
+ 			</if>
+			<if test='startDate != null'>
+				AND w.date BETWEEN #{startDate} AND #{endDate}
+ 			</if>
+ 			<if test='category_dept!=null and !category_dept.equals("")'>
+		 		AND u.dept = #{category_dept}
+ 			</if>
+ 			<if test='category_position!=null and !category_position.equals("")'>
+		 		AND u.position = #{category_position}
+ 			</if>
+ 			<if test='searchVal != null'>
+				AND u.name LIKE CONCAT('%', #{searchVal}, '%')
+ 			</if>
+	</select>
+	
+	<update id="updateWork_admin" parameterType="Map">
+		UPDATE work
+			SET end = #{end}
+			WHERE wno = #{wNo}
+	</update>
+	
+</mapper>
+
+
+

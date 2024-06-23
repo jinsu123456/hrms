@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE configuration PUBLIC "-//mybatis.org//DTD Config 3.0/EN" 
+				"http://mybatis.org/dtd/mybatis-3-config.dtd">
+<configuration>
+	<typeAliases>
+		<typeAlias type="edu.hrms.vo.DocVO" alias="docVO"/>
+		<typeAlias type="edu.hrms.vo.DocSignVO" alias="docSignVO"/>
+		<typeAlias type="edu.hrms.vo.DocFileVO" alias="docFileVO"/>
+		<typeAlias type="edu.hrms.vo.VacaVO" alias="vacaVO"/>
+		<typeAlias type="edu.hrms.vo.VacaSignVO" alias="vacaSignVO"/>
+		<typeAlias type="edu.hrms.vo.OvertimeVO" alias="overtimeVO"/>
+		<typeAlias type="edu.hrms.vo.OverVO" alias="overVO"/>
+		<typeAlias type="edu.hrms.vo.SignLineVO" alias="signLineVO"/>
+		<typeAlias type="edu.hrms.vo.NoticeVO" alias="noticeVO"/> 
+		<typeAlias type="edu.hrms.vo.UserVO" alias="userVO"/> 
+		<typeAlias type="edu.hrms.vo.MsgVO" alias="msgVO"/>
+		<typeAlias type="edu.hrms.vo.MsgReceiveVO" alias="msgReceiveVO"/>
+		<typeAlias type="edu.hrms.vo.EmployeeVO" alias="employeeVO"/>
+		<typeAlias type="edu.hrms.vo.AlarmVO" alias="alarmVO"/>
+		<typeAlias type="edu.hrms.vo.NoticeFileVO" alias="noticeFileVO"/>
+	</typeAliases>
+</configuration>

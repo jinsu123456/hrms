@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Config 3.0//EN"
+			"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="edu.hrms.mappers.docMapper">
+	
+	<select id="selectList" parameterType="Map" resultType="docVO">
+		SELECT docNo, title, content, date, rownum, u.name,
+				(CASE 
+					WHEN u.dept = 'M' THEN '대표'
+	            WHEN u.dept = 'D' THEN '개발부'
+	            WHEN u.dept = 'S' THEN '영업부'
+	            WHEN u.dept = 'P' THEN '기획부'
+	            WHEN u.dept = 'H' THEN '인사부' END
+				) AS dept, 
+				(CASE 
+					WHEN u.position = 'C' THEN '대표'
+	            WHEN u.position = 'D' THEN '부장'
+	            WHEN u.position = 'L' THEN '팀장'
+	            WHEN u.position = 'E' THEN '사원' END
+				) AS position,
+				(CASE sub.state
+					WHEN 0 THEN '대기'
+					WHEN 1 THEN '진행중'
+					WHEN 2 THEN '승인'
+					WHEN 3 THEN '반려'
+					WHEN 9 THEN '철회' END
+				) AS state
+			FROM ( SELECT @ROWNUM:=@ROWNUM+1 AS rownum
+              			, d.*
+						FROM ( SELECT @ROWNUM := 0) R
+								, doc d
+			  			WHERE 1=1
+			  			<if test='userid != null'>
+							AND d.userid = #{userid}
+			 			</if>
+			 			<if test="searchVO != null">
+				  			<if test='searchVO.startDate != null and searchVO.endDate == null'>
+								AND date <![CDATA[>=]]> #{searchVO.startDate}
+				 			</if>
+				 			<if test='searchVO.startDate == null and searchVO.endDate != null'>
+								AND date <![CDATA[<]]> DATE_ADD(#{searchVO.endDate}, INTERVAL 1 DAY)
+				 			</if>
+							<if test='searchVO.startDate != null and searchVO.endDate != null'>
+								AND date BETWEEN #{searchVO.startDate} AND DATE_ADD(#{searchVO.endDate}, INTERVAL 1 DAY)
+				 			</if>
+			 			</if>
+			 			<if test='state != null'>
+			 				AND d.state = #{state}
+			 			</if>
+			 			ORDER BY d.docNo ASC ) sub
+			INNER JOIN user u
+				ON sub.userid = u.userid 
+	 			<if test="searchVO != null">
+					<if test='searchVO.category_position!=null and !searchVO.category_position.equals("")'>
+				 		AND u.position = #{searchVO.category_position}
+		 			</if>
+		 			<if test='searchVO.searchVal!=null and !searchVO.searchVal.equals("")'>
+				 		AND u.name LIKE CONCAT ('%',#{searchVO.searchVal},'%')
+		 			</if>
+	 			</if>
+				AND u.dept = #{dept}
+ 			ORDER BY rownum DESC
+	</select>
+	
+	<insert id="insert" parameterType="docVO">
+		INSERT INTO doc (userid, title, content)
+					values (#{userid}, #{title}, #{content})
+	</insert>
+	
+	<select id="getMaxNoByUserId" parameterType="int" resultType="int">
+		SELECT MAX(docNo) docNo
+			FROM doc
+			WHERE userid = #{userid}
+	</select>
+	
+	<insert id="insertDocFile" parameterType="java.util.List">
+		INSERT INTO docfile (docNo, realNm, originNm) 
+			VALUES
+			<foreach collection="list" index="index" item="item" separator=",">
+				(#{item.docNo}, #{item.realNm}, #{item.originNm})
+			</foreach>
+	</insert>
+	
+	<insert id="insertDocSign" parameterType="java.util.List">
+		INSERT INTO docsign (docNo, signLineNo) 
+			VALUES
+			<foreach collection="list" index="index" item="item" separator=",">
+				(#{item.docNo}, #{item.signLineNo})
+			</foreach>
+	</insert>
+	
+	<delete id="deleteDocFiles" parameterType="Map">
+		DELETE FROM docfile
+			WHERE docNo = #{docNo}
+				<if test="array != null">
+					AND originNm IN 
+					<foreach item="item" collection="array" open="(" separator="," close=")">
+			  			#{item}
+				  	</foreach>
+			  	</if>
+	</delete>
+	
+	<update id="updateDoc" parameterType="docVO">
+		UPDATE doc
+			SET title = #{title}
+				, content = #{content}
+				, state = 1
+			WHERE docNo = #{docNo}
+	</update>
+	
+	<update id="updateDocSign" parameterType="int">
+		UPDATE docsign
+			SET state = 0
+			WHERE docNo = #{docNo}
+				AND state = 3
+	</update>
+	
+	<select id="selectDocByDocNo" parameterType="int" resultType="docVO">
+		SELECT d.docNo, d.userid, d.title, d.content, d.date, d.state, u.name,
+				(CASE 
+					WHEN u.dept = 'M' THEN '대표'
+	            WHEN u.dept = 'D' THEN '개발부'
+	            WHEN u.dept = 'S' THEN '영업부'
+	            WHEN u.dept = 'P' THEN '기획부'
+	            WHEN u.dept = 'H' THEN '인사부' END
+				) AS dept,
+				(CASE 
+					WHEN u.position = 'C' THEN '대표'
+	            WHEN u.position = 'D' THEN '부장'
+	            WHEN u.position = 'L' THEN '팀장'
+	            WHEN u.position = 'E' THEN '사원' END
+				) AS position
+			FROM doc d
+			INNER JOIN user u 
+				ON d.userid = u.userid
+			WHERE docNo = #{docNo}
+	</select>
+	
+	<select id="getDocSignList" parameterType="int" resultType="docSignVO">
+		SELECT ds.*, u.userid, u.name, u.dept, 
+				(CASE 
+					WHEN u.position = 'C' THEN '대표'
+	            WHEN u.position = 'D' THEN '부장'
+	            WHEN u.position = 'L' THEN '팀장'
+	            WHEN u.position = 'E' THEN '사원' END
+				) AS position
+	        	, s.signOrder,
+	        	LAG(ds.state) OVER() AS prev_state
+			FROM docsign ds
+			INNER JOIN signLine s 
+				ON ds.signLineNo = s.signLineNo
+		   INNER JOIN user u 
+		   	ON s.userid = u.userid
+		   WHERE ds.docNo = #{docNo}
+		   ORDER BY signOrder
+	</select>
+	
+	<select id="selectDocFilesByDocNo" parameterType="int" resultType="docFileVO">
+		SELECT df.* FROM docfile df
+			INNER JOIN doc d
+				ON d.docNo = df.docNo
+			WHERE df.docNo = #{docNo};
+	</select>
+	
+	<update id="withdrawl" parameterType="int">
+		UPDATE doc
+			SET state = 9
+			WHERE docNo = #{docNo}
+	</update>
+	
+	<delete id="deleteDocSign" parameterType="int">
+		DELETE FROM docSign
+			WHERE docNo = #{docNo}
+	</delete>
+
+	
+</mapper>
+
+
+
